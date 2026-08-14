@@ -1,0 +1,67 @@
+
+
+# Local dev stack for the ticket-booking-system modular monolith.
+# The app itself is NOT containerized here yet — run it from your IDE / `mvn
+# spring-boot:run` against these services. A Dockerfile + app service can be
+# added later if needed; keeping it out for now keeps the inner dev loop fast.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tbs-postgres
+    environment:
+      POSTGRES_DB: ticket_booking
+      POSTGRES_USER: tbs
+      POSTGRES_PASSWORD: tbs
+    ports:
+      - "5432:5432"
+    volumes:
+      - tbs-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tbs -d ticket_booking"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: tbs-redis
+    ports:
+      - "6379:6379"
+    # appendonly off on purpose: seat holds are TTL-based and disposable by
+    # design, not something we need durability guarantees for.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Single-node Kafka in KRaft mode (no ZooKeeper) — simpler local footprint.
+  kafka:
+    image: apache/kafka:3.8.0
+    container_name: tbs-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://kafka:19092,CONTROLLER://kafka:9093,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:19092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CLUSTER_ID: "ticket-booking-dev-cluster"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+volumes:
+  tbs-postgres-data:
