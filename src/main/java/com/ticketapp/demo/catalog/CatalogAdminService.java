@@ -4,6 +4,7 @@ import com.ticketapp.demo.catalog.internal.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -15,13 +16,19 @@ public class CatalogAdminService {
     private final VenueRepository venueRepository;
     private final EventRepository eventRepository;
     private final SeatRepository seatRepository;
+    private final TicketTypeRepository ticketTypeRepository;
+    private final CatalogEventPublisher eventPublisher;
 
     public CatalogAdminService(VenueRepository venueRepository,
                                EventRepository eventRepository,
-                               SeatRepository seatRepository) {
+                               SeatRepository seatRepository,
+                               TicketTypeRepository ticketTypeRepository,
+                               CatalogEventPublisher eventPublisher) {
         this.venueRepository = venueRepository;
         this.eventRepository = eventRepository;
         this.seatRepository = seatRepository;
+        this.ticketTypeRepository = ticketTypeRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     public UUID createVenue(CreateVenueRequest request) {
@@ -56,5 +63,19 @@ public class CatalogAdminService {
         }
         seatRepository.saveAll(seats);
         return seats.stream().map(Seat::getId).toList();
+    }
+
+    @Transactional
+    public UUID createTicketType(UUID eventId, String name, BigDecimal price, int totalQuantity) {
+        EventListing event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new NoSuchElementException("No event with id " + eventId));
+
+        TicketType ticketType = new TicketType(UUID.randomUUID(), eventId, name, price, totalQuantity);
+        ticketTypeRepository.save(ticketType);
+
+        // Publish event so Booking can initialize Redis with available quantity
+        eventPublisher.publish(new TicketTypeCreated(ticketType.getId(), eventId, totalQuantity));
+
+        return ticketType.getId();
     }
 }

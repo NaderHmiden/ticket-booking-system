@@ -32,6 +32,11 @@ public class CatalogEventController {
         return queryService.getSeatMap(eventId);
     }
 
+    @GetMapping("/events/{eventId}/ticket-types")
+    public List<TicketTypeView> getTicketTypes(@PathVariable UUID eventId) {
+        return queryService.getTicketTypes(eventId);
+    }
+
     @PostMapping("/venues")
     public ResponseEntity<Map<String, UUID>> createVenue(@Valid @RequestBody CreateVenueRequest request) {
         UUID id = adminService.createVenue(request);

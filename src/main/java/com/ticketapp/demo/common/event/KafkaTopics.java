@@ -28,6 +28,12 @@ public final class KafkaTopics {
     /** Published by Booking when a booking is confirmed. Payload: seatId. */
     public static final String BOOKING_CONFIRMED = "booking.confirmed";
 
+    /** Published by Catalog when a ticket type is created for GENERAL_ADMISSION events. Payload includes: ticketTypeId, eventId, totalQuantity. */
+    public static final String CATALOG_TICKET_TYPE_CREATED = "catalog.ticket-type-created";
+
+    /** Published by Booking when ticket availability changes. Payload includes: ticketTypeId, newAvailable. */
+    public static final String BOOKING_TICKET_AVAILABILITY_CHANGED = "booking.ticket-availability-changed";
+
     private KafkaTopics() {
     }
 }

@@ -30,6 +30,10 @@ public class EventListing {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "event_type", nullable = false)
+    private EventType eventType;
+
     protected EventListing() { } // JPA
 
     public EventListing(UUID id, UUID venueId, String name, String category, Instant startsAt) {
@@ -39,6 +43,7 @@ public class EventListing {
         this.category = category;
         this.startsAt = startsAt;
         this.status = EventStatus.ON_SALE;
+        this.eventType = EventType.SEATED;
         this.createdAt = Instant.now();
     }
 
@@ -48,5 +53,6 @@ public class EventListing {
     public String getCategory() { return category; }
     public Instant getStartsAt() { return startsAt; }
     public EventStatus getStatus() { return status; }
+    public EventType getEventType() { return eventType; }
     public Instant getCreatedAt() { return createdAt; }
 }

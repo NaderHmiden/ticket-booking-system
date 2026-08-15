@@ -16,15 +16,18 @@ public class CatalogQueryService {
     private final EventRepository eventRepository;
     private final VenueRepository venueRepository;
     private final SeatRepository seatRepository;
+    private final TicketTypeRepository ticketTypeRepository;
     private final SeatAvailabilityReadModel availabilityReadModel;
 
     public CatalogQueryService(EventRepository eventRepository,
                                VenueRepository venueRepository,
                                SeatRepository seatRepository,
+                               TicketTypeRepository ticketTypeRepository,
                                SeatAvailabilityReadModel availabilityReadModel) {
         this.eventRepository = eventRepository;
         this.venueRepository = venueRepository;
         this.seatRepository = seatRepository;
+        this.ticketTypeRepository = ticketTypeRepository;
         this.availabilityReadModel = availabilityReadModel;
     }
 
@@ -69,5 +72,20 @@ public class CatalogQueryService {
                 .toList();
 
         return new SeatMapView(event.getId(), event.getName(), seatViews);
+    }
+
+    public List<TicketTypeView> getTicketTypes(UUID eventId) {
+        EventListing event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new NoSuchElementException("No event with id " + eventId));
+
+        List<TicketType> ticketTypes = ticketTypeRepository.findByEventId(eventId);
+        return ticketTypes.stream()
+                .map(tt -> new TicketTypeView(
+                        tt.getId(),
+                        tt.getName(),
+                        tt.getPrice(),
+                        tt.getTotalQuantity()
+                ))
+                .toList();
     }
 }
