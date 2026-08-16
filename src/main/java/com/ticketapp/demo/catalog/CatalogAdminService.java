@@ -4,9 +4,9 @@ import com.ticketapp.demo.catalog.internal.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.NoSuchElementException;
 import java.util.UUID;
 
@@ -41,16 +41,20 @@ public class CatalogAdminService {
         if (!venueRepository.existsById(request.venueId())) {
             throw new NoSuchElementException("No venue with id " + request.venueId());
         }
+        EventType eventType = parseEventType(request.eventType());
         EventListing event = new EventListing(
-                UUID.randomUUID(), request.venueId(), request.name(), request.category(), request.startsAt());
+                UUID.randomUUID(), request.venueId(), request.name(), request.category(),
+                request.startsAt(), eventType);
         eventRepository.save(event);
         return event.getId();
     }
 
     @Transactional
     public List<UUID> generateSeats(UUID eventId, GenerateSeatsRequest request) {
-        if (!eventRepository.existsById(eventId)) {
-            throw new NoSuchElementException("No event with id " + eventId);
+        EventListing event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new NoSuchElementException("No event with id " + eventId));
+        if (event.getEventType() != EventType.SEATED) {
+            throw new IllegalArgumentException("Seats can only be generated for SEATED events");
         }
         String currency = request.currency() == null || request.currency().isBlank() ? "USD" : request.currency();
 
@@ -66,16 +70,28 @@ public class CatalogAdminService {
     }
 
     @Transactional
-    public UUID createTicketType(UUID eventId, String name, BigDecimal price, int totalQuantity) {
+    public UUID createTicketType(UUID eventId, CreateTicketTypeRequest request) {
         EventListing event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new NoSuchElementException("No event with id " + eventId));
+        if (event.getEventType() != EventType.GENERAL_ADMISSION) {
+            throw new IllegalArgumentException("Ticket types require a GENERAL_ADMISSION event");
+        }
 
-        TicketType ticketType = new TicketType(UUID.randomUUID(), eventId, name, price, totalQuantity);
+        TicketType ticketType = new TicketType(
+                UUID.randomUUID(), eventId, request.name(), request.price(), request.totalQuantity());
         ticketTypeRepository.save(ticketType);
-
-        // Publish event so Booking can initialize Redis with available quantity
-        eventPublisher.publish(new TicketTypeCreated(ticketType.getId(), eventId, totalQuantity));
-
+        eventPublisher.publish(new TicketTypeCreated(ticketType.getId(), eventId, request.totalQuantity()));
         return ticketType.getId();
+    }
+
+    private static EventType parseEventType(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return EventType.SEATED;
+        }
+        try {
+            return EventType.valueOf(raw.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("eventType must be SEATED or GENERAL_ADMISSION");
+        }
     }
 }

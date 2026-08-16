@@ -1,9 +1,7 @@
 package com.ticketapp.demo.payment;
 
 /**
- * Placeholder marker for the Payment stub's public API surface.
- * Step 4 replaces this with the fake-gateway trigger endpoint and the
- * PaymentCompleted/PaymentFailed event publication.
+ * Payment context: async Kafka stub + read-only status API (holdId only).
  */
 public final class PaymentModule {
     private PaymentModule() {

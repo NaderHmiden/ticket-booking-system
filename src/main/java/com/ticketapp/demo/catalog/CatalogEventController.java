@@ -56,8 +56,21 @@ public class CatalogEventController {
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("seatIds", seatIds, "count", seatIds.size()));
     }
 
+    @PostMapping("/events/{eventId}/ticket-types")
+    public ResponseEntity<Map<String, UUID>> createTicketType(@PathVariable UUID eventId,
+                                                              @Valid @RequestBody CreateTicketTypeRequest request) {
+        UUID id = adminService.createTicketType(eventId, request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("ticketTypeId", id));
+    }
+
     @ExceptionHandler(NoSuchElementException.class)
     public ResponseEntity<Map<String, String>> handleNotFound(NoSuchElementException e) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("error", e.getMessage()));
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, String>> handleBadRequest(IllegalArgumentException e) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("error", "BAD_REQUEST", "message", e.getMessage()));
     }
 }

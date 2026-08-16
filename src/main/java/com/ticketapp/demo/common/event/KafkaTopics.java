@@ -34,6 +34,15 @@ public final class KafkaTopics {
     /** Published by Booking when ticket availability changes. Payload includes: ticketTypeId, newAvailable. */
     public static final String BOOKING_TICKET_AVAILABILITY_CHANGED = "booking.ticket-availability-changed";
 
+    /** Published by Booking to request payment for a hold. Payload: holdId, amount, requestedAt. */
+    public static final String PAYMENT_REQUESTS = "payment.requests";
+
+    /** Published by Payment when a payment result is determined. Payload: holdId, succeededAt or failedAt, reason. */
+    public static final String PAYMENT_RESULTS = "payment.results";
+
+    /** Published by Booking when payment succeeds after the hold already expired/released. Payload: holdId, amount. */
+    public static final String PAYMENT_ANOMALIES = "payment.anomalies";
+
     private KafkaTopics() {
     }
 }

@@ -10,6 +10,8 @@ public record CreateEventRequest(
         @NotNull UUID venueId,
         @NotBlank String name,
         @NotBlank String category,
-        @NotNull Instant startsAt
+        @NotNull Instant startsAt,
+        /** SEATED (default) or GENERAL_ADMISSION */
+        String eventType
 ) {
 }

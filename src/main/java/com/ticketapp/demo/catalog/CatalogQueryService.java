@@ -1,7 +1,8 @@
 package com.ticketapp.demo.catalog;
 
-
 import com.ticketapp.demo.catalog.internal.*;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -13,22 +14,27 @@ import java.util.stream.Collectors;
 @Service
 public class CatalogQueryService {
 
+    private static final String TICKET_AVAILABLE_KEY_PREFIX = "booking:ticket-type-available:";
+
     private final EventRepository eventRepository;
     private final VenueRepository venueRepository;
     private final SeatRepository seatRepository;
     private final TicketTypeRepository ticketTypeRepository;
     private final SeatAvailabilityReadModel availabilityReadModel;
+    private final ObjectProvider<StringRedisTemplate> redisTemplate;
 
     public CatalogQueryService(EventRepository eventRepository,
                                VenueRepository venueRepository,
                                SeatRepository seatRepository,
                                TicketTypeRepository ticketTypeRepository,
-                               SeatAvailabilityReadModel availabilityReadModel) {
+                               SeatAvailabilityReadModel availabilityReadModel,
+                               ObjectProvider<StringRedisTemplate> redisTemplate) {
         this.eventRepository = eventRepository;
         this.venueRepository = venueRepository;
         this.seatRepository = seatRepository;
         this.ticketTypeRepository = ticketTypeRepository;
         this.availabilityReadModel = availabilityReadModel;
+        this.redisTemplate = redisTemplate;
     }
 
     public List<EventSummary> listEvents() {
@@ -45,7 +51,8 @@ public class CatalogQueryService {
                             venue != null ? venue.getName() : "Unknown venue",
                             venue != null ? venue.getCity() : "Unknown city",
                             event.getStartsAt(),
-                            event.getStatus().name()
+                            event.getStatus().name(),
+                            event.getEventType().name()
                     );
                 })
                 .toList();
@@ -75,17 +82,34 @@ public class CatalogQueryService {
     }
 
     public List<TicketTypeView> getTicketTypes(UUID eventId) {
-        EventListing event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new NoSuchElementException("No event with id " + eventId));
+        if (!eventRepository.existsById(eventId)) {
+            throw new NoSuchElementException("No event with id " + eventId);
+        }
 
-        List<TicketType> ticketTypes = ticketTypeRepository.findByEventId(eventId);
-        return ticketTypes.stream()
+        return ticketTypeRepository.findByEventId(eventId).stream()
                 .map(tt -> new TicketTypeView(
                         tt.getId(),
                         tt.getName(),
                         tt.getPrice(),
-                        tt.getTotalQuantity()
+                        tt.getTotalQuantity(),
+                        readAvailableQuantity(tt.getId())
                 ))
                 .toList();
+    }
+
+    private Integer readAvailableQuantity(UUID ticketTypeId) {
+        StringRedisTemplate redis = redisTemplate.getIfAvailable();
+        if (redis == null) {
+            return null;
+        }
+        String raw = redis.opsForValue().get(TICKET_AVAILABLE_KEY_PREFIX + ticketTypeId);
+        if (raw == null) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(raw);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }

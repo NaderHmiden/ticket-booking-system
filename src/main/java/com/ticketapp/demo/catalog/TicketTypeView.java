@@ -4,13 +4,13 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 /**
- * One ticket type for a GENERAL_ADMISSION event: name, price, and total quantity.
- * Used by clients to query available ticket types for an event.
+ * Ticket type for GENERAL_ADMISSION events, including live remaining stock when available.
  */
 public record TicketTypeView(
         UUID id,
         String name,
         BigDecimal price,
-        int totalQuantity
+        int totalQuantity,
+        Integer availableQuantity
 ) {
 }

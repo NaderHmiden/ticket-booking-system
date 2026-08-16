@@ -4,8 +4,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * One row of the event browse listing. A DTO, not the {@code EventListing}
- * entity — the entity never crosses out of {@code catalog.internal}.
+ * One row of the event browse listing.
  */
 public record EventSummary(
         UUID id,
@@ -14,6 +13,7 @@ public record EventSummary(
         String venueName,
         String city,
         Instant startsAt,
-        String status
+        String status,
+        String eventType
 ) {
 }

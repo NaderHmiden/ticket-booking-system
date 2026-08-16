@@ -37,13 +37,17 @@ public class EventListing {
     protected EventListing() { } // JPA
 
     public EventListing(UUID id, UUID venueId, String name, String category, Instant startsAt) {
+        this(id, venueId, name, category, startsAt, EventType.SEATED);
+    }
+
+    public EventListing(UUID id, UUID venueId, String name, String category, Instant startsAt, EventType eventType) {
         this.id = id;
         this.venueId = venueId;
         this.name = name;
         this.category = category;
         this.startsAt = startsAt;
         this.status = EventStatus.ON_SALE;
-        this.eventType = EventType.SEATED;
+        this.eventType = eventType != null ? eventType : EventType.SEATED;
         this.createdAt = Instant.now();
     }
 

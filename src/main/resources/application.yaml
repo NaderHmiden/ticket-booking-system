@@ -15,10 +15,7 @@ spring:
 
   flyway:
     enabled: true
-    locations: classpath:db/migration
-    # Each context gets its own migration subfolder so schema ownership stays
-    # obvious: db/migration/catalog, db/migration/booking, etc. (added as each
-    # context is built out in later steps).
+    locations: classpath:db.migration
 
   data:
     redis:
@@ -40,6 +37,17 @@ spring:
   booking:
     hold:
       ttl-seconds: 300
+
+payment:
+  stub:
+    failure-rate: 0.1
+
+app:
+  cors:
+    allowed-origins: http://localhost:5173,http://localhost:3000
+  security:
+    jwt-secret: ticket-booking-dev-secret-change-me-32b
+    jwt-ttl-seconds: 86400
 
 server:
   port: 8080

@@ -1,14 +1,20 @@
 package com.ticketapp.demo.booking;
 
-import com.ticketapp.demo.booking.internal.HoldStrategyFactory;
+import com.ticketapp.demo.booking.internal.Booking;
+import com.ticketapp.demo.booking.internal.BookingService;
 import com.ticketapp.demo.booking.internal.QuantityHoldStrategy;
 import com.ticketapp.demo.catalog.internal.EventRepository;
 import com.ticketapp.demo.catalog.internal.EventType;
+import com.ticketapp.demo.catalog.internal.SeatRepository;
+import com.ticketapp.demo.catalog.internal.TicketType;
+import com.ticketapp.demo.catalog.internal.TicketTypeRepository;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.UUID;
@@ -18,62 +24,73 @@ import java.util.UUID;
 public class SeatHoldController {
 
     private final SeatHoldService seatHoldService;
-    private final HoldStrategyFactory holdStrategyFactory;
     private final QuantityHoldStrategy quantityHoldStrategy;
     private final EventRepository eventRepository;
+    private final SeatRepository seatRepository;
+    private final TicketTypeRepository ticketTypeRepository;
+    private final BookingService bookingService;
 
     public SeatHoldController(SeatHoldService seatHoldService,
-                             HoldStrategyFactory holdStrategyFactory,
-                             QuantityHoldStrategy quantityHoldStrategy,
-                             EventRepository eventRepository) {
+                              QuantityHoldStrategy quantityHoldStrategy,
+                              EventRepository eventRepository,
+                              SeatRepository seatRepository,
+                              TicketTypeRepository ticketTypeRepository,
+                              BookingService bookingService) {
         this.seatHoldService = seatHoldService;
-        this.holdStrategyFactory = holdStrategyFactory;
         this.quantityHoldStrategy = quantityHoldStrategy;
         this.eventRepository = eventRepository;
+        this.seatRepository = seatRepository;
+        this.ticketTypeRepository = ticketTypeRepository;
+        this.bookingService = bookingService;
     }
 
-    /**
-     * Unified endpoint to acquire holds for both SEATED and GENERAL_ADMISSION events.
-     * For backward compatibility, also supports the original AcquireHoldRequest.
-     */
     @PostMapping("/holds")
     public ResponseEntity<HoldResult> acquireHold(@Valid @RequestBody UnifiedHoldRequest request) {
-        // Fetch event to determine type
         var event = eventRepository.findById(request.eventId())
                 .orElseThrow(() -> new NoSuchElementException("No event with id " + request.eventId()));
 
         EventType eventType = event.getEventType();
-
         if (!request.isValidForEventType(eventType)) {
             return ResponseEntity.badRequest().build();
         }
 
-        HoldResult result = switch (eventType) {
+        HoldResult result;
+        BigDecimal amount;
+
+        switch (eventType) {
             case SEATED -> {
-                UUID seatId = request.seatId()
-                        .orElseThrow(() -> new IllegalArgumentException("seatId required for SEATED events"));
+                UUID seatId = request.seatId().orElseThrow();
                 AcquireHoldRequest seatRequest = new AcquireHoldRequest(request.eventId(), seatId, request.userId());
-                yield seatHoldService.acquireHold(seatRequest);
+                result = seatHoldService.acquireHold(seatRequest);
+                var seat = seatRepository.findById(seatId)
+                        .orElseThrow(() -> new NoSuchElementException("No seat with id " + seatId));
+                amount = BigDecimal.valueOf(seat.getPriceCents(), 2);
             }
             case GENERAL_ADMISSION -> {
-                UUID ticketTypeId = request.ticketTypeId()
-                        .orElseThrow(() -> new IllegalArgumentException("ticketTypeId required for GENERAL_ADMISSION events"));
-                int quantity = request.quantity()
-                        .orElseThrow(() -> new IllegalArgumentException("quantity required for GENERAL_ADMISSION events"));
-                yield quantityHoldStrategy.acquireQuantity(ticketTypeId, quantity, request.eventId(), request.userId());
+                UUID ticketTypeId = request.ticketTypeId().orElseThrow();
+                int quantity = request.quantity().orElseThrow();
+                result = quantityHoldStrategy.acquireQuantity(
+                        ticketTypeId, quantity, request.eventId(), request.userId());
+                TicketType ticketType = ticketTypeRepository.findById(ticketTypeId)
+                        .orElseThrow(() -> new NoSuchElementException("No ticket type with id " + ticketTypeId));
+                amount = ticketType.getPrice()
+                        .multiply(BigDecimal.valueOf(quantity))
+                        .setScale(2, RoundingMode.HALF_UP);
             }
-        };
+            default -> throw new IllegalStateException("Unsupported event type " + eventType);
+        }
 
+        bookingService.createBooking(result, request.userId(), amount);
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 
-    /**
-     * Original endpoint for backward compatibility (supports AcquireHoldRequest directly).
-     * This allows existing clients to continue working without changes.
-     */
     @PostMapping("/holds/seat")
     public ResponseEntity<HoldResult> acquireHoldLegacy(@Valid @RequestBody AcquireHoldRequest request) {
         HoldResult result = seatHoldService.acquireHold(request);
+        var seat = seatRepository.findById(request.seatId())
+                .orElseThrow(() -> new NoSuchElementException("No seat with id " + request.seatId()));
+        BigDecimal amount = BigDecimal.valueOf(seat.getPriceCents(), 2);
+        bookingService.createBooking(result, request.userId(), amount);
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 
@@ -93,5 +110,11 @@ public class SeatHoldController {
     public ResponseEntity<Map<String, String>> handleInsufficientInventory(IllegalStateException e) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(Map.of("error", "INSUFFICIENT_INVENTORY", "message", e.getMessage()));
+    }
+
+    @ExceptionHandler(NoSuchElementException.class)
+    public ResponseEntity<Map<String, String>> handleNotFound(NoSuchElementException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("error", "NOT_FOUND", "message", e.getMessage()));
     }
 }
