@@ -5,6 +5,7 @@ import com.ticketapp.demo.booking.internal.QuantityHoldStrategy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.test.context.TestPropertySource;
@@ -29,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * Validates that the total acquired never exceeds stock and matches Redis state.
  */
 @SpringBootTest
-@Testcontainers
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 public class GATicketConcurrentHoldIntegrationTest {
 
     @Container

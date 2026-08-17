@@ -81,6 +81,7 @@ public class CatalogAdminService {
                 UUID.randomUUID(), eventId, request.name(), request.price(), request.totalQuantity());
         ticketTypeRepository.save(ticketType);
         eventPublisher.publish(new TicketTypeCreated(ticketType.getId(), eventId, request.totalQuantity()));
+
         return ticketType.getId();
     }
 
