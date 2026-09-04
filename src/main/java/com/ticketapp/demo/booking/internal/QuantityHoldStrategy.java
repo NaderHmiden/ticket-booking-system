@@ -3,6 +3,8 @@ package com.ticketapp.demo.booking.internal;
 import com.ticketapp.demo.booking.AcquireHoldRequest;
 import com.ticketapp.demo.booking.HoldResult;
 import com.ticketapp.demo.booking.HoldStrategy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -22,7 +24,9 @@ import java.util.UUID;
  * counter in Redis. Each hold stores the quantity and ticket type ID so release can re-increment.
  */
 @Component
+
 public class QuantityHoldStrategy implements HoldStrategy {
+    private static final Logger log = LoggerFactory.getLogger(QuantityHoldStrategy.class);
 
     private static final String HOLD_KEY_PREFIX = "booking:quantity-hold:";
     private static final String TICKET_AVAILABLE_KEY_PREFIX = "booking:ticket-type-available:";
@@ -92,6 +96,7 @@ public class QuantityHoldStrategy implements HoldStrategy {
                 holdData,
                 String.valueOf(holdTtl.toSeconds())
         );
+        log.info(String.valueOf(result));
 
         if (result == null || result != 1L) {
             throw new IllegalStateException("Insufficient ticket availability for ticket type " + ticketTypeId);

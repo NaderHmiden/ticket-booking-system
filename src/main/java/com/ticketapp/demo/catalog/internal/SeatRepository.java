@@ -9,4 +9,6 @@ public interface SeatRepository extends JpaRepository<Seat, UUID> {
     List<Seat> findByEventIdOrderBySectionAscRowLabelAscSeatNumberAsc(UUID eventId);
 
     long countByEventId(UUID eventId);
+
+    long deleteByEventSectionId(UUID eventSectionId);
 }

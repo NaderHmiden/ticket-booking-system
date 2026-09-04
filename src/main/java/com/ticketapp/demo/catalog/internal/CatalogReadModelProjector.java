@@ -23,7 +23,7 @@ public class CatalogReadModelProjector {
         this.readModel = readModel;
         this.objectMapper = objectMapper;
     }
-
+/*#######################################################*/
     @KafkaListener(topics = KafkaTopics.BOOKING_SEAT_HELD, groupId = "catalog-read-model-projector")
     public void onSeatHeld(String message) {
         try {

@@ -44,6 +44,7 @@ public class BookingService {
         );
         bookingRepository.save(booking);
         log.info("Created booking for hold {} amount={}", holdResult.holdId(), amount);
+        log.info(" the bookink is {}",booking);
         return booking;
     }
 

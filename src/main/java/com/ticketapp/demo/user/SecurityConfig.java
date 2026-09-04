@@ -37,13 +37,16 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/error").permitAll() // <--- TRES IMPORTANT pour voir les vraies erreurs au lieu de 403
                         .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/catalog/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/bookings/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/payment/**").permitAll()
-                        // Write paths: catalog admin + holds + confirm require auth
-                        .requestMatchers(HttpMethod.POST, "/api/catalog/**").hasAnyRole("USER", "ADMIN")
+
+                        // --- MODIFICATION ICI POUR TESTER LE FRONTEND ---
+                        .requestMatchers(HttpMethod.POST, "/api/catalog/**").permitAll()
+
                         .requestMatchers("/api/booking/**").hasAnyRole("USER", "ADMIN")
                         .requestMatchers(HttpMethod.POST, "/bookings/**").hasAnyRole("USER", "ADMIN")
                         .requestMatchers("/api/auth/me").authenticated()
@@ -55,7 +58,7 @@ public class SecurityConfig {
 
     @Bean
     CorsConfigurationSource corsConfigurationSource(
-            @Value("${app.cors.allowed-origins:http://localhost:5173,http://localhost:3000}") String origins) {
+            @Value("${app.cors.allowed-origins:http://localhost:5174,http://localhost:3000,http://localhost:5173}") String origins) {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(Arrays.stream(origins.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList());
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));

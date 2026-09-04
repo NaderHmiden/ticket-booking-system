@@ -31,10 +31,18 @@ public class Seat {
     @Column(nullable = false)
     private String currency;
 
+    @Column(name = "event_section_id")
+    private UUID eventSectionId;
+
     protected Seat() { } // JPA
 
     public Seat(UUID id, UUID eventId, String section, String rowLabel, int seatNumber,
                 int priceCents, String currency) {
+        this(id, eventId, section, rowLabel, seatNumber, priceCents, currency, null);
+    }
+
+    public Seat(UUID id, UUID eventId, String section, String rowLabel, int seatNumber,
+                int priceCents, String currency, UUID eventSectionId) {
         this.id = id;
         this.eventId = eventId;
         this.section = section;
@@ -42,6 +50,7 @@ public class Seat {
         this.seatNumber = seatNumber;
         this.priceCents = priceCents;
         this.currency = currency;
+        this.eventSectionId = eventSectionId;
     }
 
     public UUID getId() { return id; }
@@ -51,4 +60,5 @@ public class Seat {
     public int getSeatNumber() { return seatNumber; }
     public int getPriceCents() { return priceCents; }
     public String getCurrency() { return currency; }
+    public UUID getEventSectionId() { return eventSectionId; }
 }
