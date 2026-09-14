@@ -45,7 +45,7 @@ public class SeatHoldController {
     }
 
     @PostMapping("/holds")
-    public ResponseEntity<HoldResult> acquireHold(@Valid @RequestBody UnifiedHoldRequest request) {
+    public ResponseEntity<HoldResult> acquireHold(@Valid @RequestBody UnifiedHoldRequest request, org.springframework.security.core.Authentication authentication) { if (!request.userId().equals(authentication.getPrincipal())) { return ResponseEntity.status(HttpStatus.FORBIDDEN).build(); }
         var event = eventRepository.findById(request.eventId())
                 .orElseThrow(() -> new NoSuchElementException("No event with id " + request.eventId()));
 
@@ -66,7 +66,7 @@ public class SeatHoldController {
                         .orElseThrow(() -> new NoSuchElementException("No seat with id " + seatId));
                 amount = BigDecimal.valueOf(seat.getPriceCents(), 2);
             }
-            case GENERAL_ADMISSION -> {
+            case GENERAL_ADMISSION, TRANSPORT_BUS -> {
                 UUID ticketTypeId = request.ticketTypeId().orElseThrow();
                 int quantity = request.quantity().orElseThrow();
                 result = quantityHoldStrategy.acquireQuantity(
@@ -80,17 +80,18 @@ public class SeatHoldController {
             default -> throw new IllegalStateException("Unsupported event type " + eventType);
         }
 
-        bookingService.createBooking(result, request.userId(), amount);
+        bookingService.createBooking(result, request.userId(), amount,
+                (eventType == EventType.GENERAL_ADMISSION || eventType == EventType.TRANSPORT_BUS) ? request.quantity().orElseThrow() : 1, request.passengerCins());
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 
     @PostMapping("/holds/seat")
-    public ResponseEntity<HoldResult> acquireHoldLegacy(@Valid @RequestBody AcquireHoldRequest request) {
+    public ResponseEntity<HoldResult> acquireHoldLegacy(@Valid @RequestBody AcquireHoldRequest request, org.springframework.security.core.Authentication authentication) { if (!request.userId().equals(authentication.getPrincipal())) { return ResponseEntity.status(HttpStatus.FORBIDDEN).build(); }
         HoldResult result = seatHoldService.acquireHold(request);
         var seat = seatRepository.findById(request.seatId())
                 .orElseThrow(() -> new NoSuchElementException("No seat with id " + request.seatId()));
         BigDecimal amount = BigDecimal.valueOf(seat.getPriceCents(), 2);
-        bookingService.createBooking(result, request.userId(), amount);
+        bookingService.createBooking(result, request.userId(), amount, 1, null);
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 

@@ -13,7 +13,8 @@ public record UnifiedHoldRequest(
         Optional<UUID> seatId,           // For SEATED events
         Optional<UUID> ticketTypeId,     // For GENERAL_ADMISSION events
         Optional<Integer> quantity,      // For GENERAL_ADMISSION events
-        @NotNull UUID userId
+        @NotNull UUID userId,
+        java.util.List<String> passengerCins
 ) {
     /**
      * Validates that the request has the right fields for the event type.
@@ -22,7 +23,7 @@ public record UnifiedHoldRequest(
     public boolean isValidForEventType(com.ticketapp.demo.catalog.internal.EventType eventType) {
         return switch (eventType) {
             case SEATED -> seatId.isPresent() && ticketTypeId.isEmpty() && quantity.isEmpty();
-            case GENERAL_ADMISSION -> ticketTypeId.isPresent() && quantity.isPresent() && quantity.get() > 0 && seatId.isEmpty();
+            case GENERAL_ADMISSION, TRANSPORT_BUS -> ticketTypeId.isPresent() && quantity.isPresent() && quantity.get() > 0 && seatId.isEmpty();
         };
     }
 }

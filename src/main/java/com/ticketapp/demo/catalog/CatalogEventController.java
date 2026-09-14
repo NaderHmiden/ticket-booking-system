@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.Authentication;
 
 import java.util.List;
 import java.util.Map;
@@ -20,6 +21,11 @@ public class CatalogEventController {
     public CatalogEventController(CatalogQueryService queryService, CatalogAdminService adminService) {
         this.queryService = queryService;
         this.adminService = adminService;
+    }
+
+    @GetMapping("/trips/search")
+    public List<EventSummary> searchTrips(@RequestParam UUID departureVenueId, @RequestParam UUID arrivalVenueId) {
+        return queryService.searchTrips(departureVenueId, arrivalVenueId);
     }
 
     @GetMapping("/events")
@@ -44,8 +50,8 @@ public class CatalogEventController {
     }
 
     @PostMapping("/events")
-    public ResponseEntity<Map<String, UUID>> createEvent(@Valid @RequestBody CreateEventRequest request) {
-        UUID id = adminService.createEvent(request);
+    public ResponseEntity<Map<String, UUID>> createEvent(@Valid @RequestBody CreateEventRequest request, Authentication authentication) {
+        UUID id = adminService.createEvent(request, authentication == null ? null : (UUID) authentication.getPrincipal());
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("eventId", id));
     }
 

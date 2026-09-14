@@ -12,6 +12,9 @@ public record CreateEventRequest(
         @NotBlank String category,
         @NotNull Instant startsAt,
         /** SEATED (default) or GENERAL_ADMISSION */
-        String eventType
+        String eventType,
+        java.util.Optional<UUID> arrivalVenueId,
+        java.util.Optional<Instant> arrivesAt,
+        java.util.Optional<String> transportCompany
 ) {
 }

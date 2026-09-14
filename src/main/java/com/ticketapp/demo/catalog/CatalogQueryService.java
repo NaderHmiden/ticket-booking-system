@@ -37,6 +37,28 @@ public class CatalogQueryService {
         this.redisTemplate = redisTemplate;
     }
 
+    public List<EventSummary> searchTrips(UUID departureVenueId, UUID arrivalVenueId) {
+        Map<UUID, Venue> venuesById = venueRepository.findAll().stream()
+                .collect(Collectors.toMap(Venue::getId, v -> v));
+
+        return eventRepository.findByEventTypeAndVenueIdAndArrivalVenueIdOrderByStartsAtAsc(EventType.TRANSPORT_BUS, departureVenueId, arrivalVenueId).stream()
+                .map(event -> {
+                    var venue = venuesById.get(event.getVenueId());
+                    var arrivalVenue = event.getArrivalVenueId() != null ? venuesById.get(event.getArrivalVenueId()) : null;
+                    return new EventSummary(
+                            event.getId(),
+                            event.getName(),
+                            event.getCategory(),
+                            venue != null ? venue.getName() + " -> " + (arrivalVenue != null ? arrivalVenue.getName() : "Unknown") : "Unknown venue",
+                            venue != null ? venue.getCity() : "Unknown city",
+                            event.getStartsAt(),
+                            event.getStatus().name(),
+                            event.getEventType().name()
+                    );
+                })
+                .toList();
+    }
+
     public List<EventSummary> listEvents() {
         Map<UUID, Venue> venuesById = venueRepository.findAll().stream()
                 .collect(Collectors.toMap(Venue::getId, v -> v));

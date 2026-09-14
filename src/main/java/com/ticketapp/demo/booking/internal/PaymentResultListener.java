@@ -6,6 +6,7 @@ import com.ticketapp.demo.booking.HoldStrategy;
 import com.ticketapp.demo.catalog.internal.EventListing;
 import com.ticketapp.demo.catalog.internal.EventRepository;
 import com.ticketapp.demo.catalog.internal.EventType;
+import com.ticketapp.demo.economy.TicketService;
 import com.ticketapp.demo.common.event.KafkaTopics;
 import com.ticketapp.demo.common.event.PaymentEventPayloads;
 import org.slf4j.Logger;
@@ -32,18 +33,21 @@ public class PaymentResultListener {
     private final EventRepository eventRepository;
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final ObjectMapper objectMapper;
+    private final TicketService ticketService;
 
     public PaymentResultListener(
             BookingRepository bookingRepository,
             HoldStrategyFactory holdStrategyFactory,
             EventRepository eventRepository,
             KafkaTemplate<String, String> kafkaTemplate,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            TicketService ticketService) {
         this.bookingRepository = bookingRepository;
         this.holdStrategyFactory = holdStrategyFactory;
         this.eventRepository = eventRepository;
         this.kafkaTemplate = kafkaTemplate;
         this.objectMapper = objectMapper;
+        this.ticketService = ticketService;
     }
 
     @KafkaListener(topics = KafkaTopics.PAYMENT_RESULTS, groupId = "booking-payment-result-processor")
@@ -95,6 +99,7 @@ public class PaymentResultListener {
                 .orElseThrow(() -> new IllegalStateException("Booking missing after confirm for hold " + holdId));
         HoldStrategy strategy = resolveStrategy(booking);
         strategy.confirm(booking.getResourceId(), UUID.fromString(holdId));
+        ticketService.issueFor(booking);
 
         // Notify catalog (seat → BOOKED) and notification stub
         try {

@@ -22,7 +22,7 @@ public class HoldStrategyFactory {
     public HoldStrategy resolve(EventType eventType) {
         return switch (eventType) {
             case SEATED -> seatHoldStrategy;
-            case GENERAL_ADMISSION -> quantityHoldStrategy;
+            case GENERAL_ADMISSION, TRANSPORT_BUS -> quantityHoldStrategy;
         };
     }
 }

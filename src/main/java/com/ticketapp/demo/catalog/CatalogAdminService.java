@@ -38,13 +38,20 @@ public class CatalogAdminService {
     }
 
     public UUID createEvent(CreateEventRequest request) {
+        return createEvent(request, null);
+    }
+
+    public UUID createEvent(CreateEventRequest request, UUID organizerId) {
         if (!venueRepository.existsById(request.venueId())) {
             throw new NoSuchElementException("No venue with id " + request.venueId());
         }
         EventType eventType = parseEventType(request.eventType());
         EventListing event = new EventListing(
                 UUID.randomUUID(), request.venueId(), request.name(), request.category(),
-                request.startsAt(), eventType);
+                request.startsAt(), eventType, organizerId);
+        request.arrivalVenueId().ifPresent(event::setArrivalVenueId);
+        request.arrivesAt().ifPresent(event::setArrivesAt);
+        request.transportCompany().ifPresent(event::setTransportCompany);
         eventRepository.save(event);
         return event.getId();
     }
@@ -53,7 +60,7 @@ public class CatalogAdminService {
     public List<UUID> generateSeats(UUID eventId, GenerateSeatsRequest request) {
         EventListing event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new NoSuchElementException("No event with id " + eventId));
-        if (event.getEventType() != EventType.SEATED) {
+        if (event.getEventType() != EventType.SEATED && event.getEventType() != EventType.TRANSPORT_BUS) {
             throw new IllegalArgumentException("Seats can only be generated for SEATED events");
         }
         String currency = request.currency() == null || request.currency().isBlank() ? "USD" : request.currency();
@@ -73,7 +80,7 @@ public class CatalogAdminService {
     public UUID createTicketType(UUID eventId, CreateTicketTypeRequest request) {
         EventListing event = eventRepository.findById(eventId)
                 .orElseThrow(() -> new NoSuchElementException("No event with id " + eventId));
-        if (event.getEventType() != EventType.GENERAL_ADMISSION) {
+        if (event.getEventType() != EventType.GENERAL_ADMISSION && event.getEventType() != EventType.TRANSPORT_BUS) {
             throw new IllegalArgumentException("Ticket types require a GENERAL_ADMISSION event");
         }
 
@@ -92,7 +99,7 @@ public class CatalogAdminService {
         try {
             return EventType.valueOf(raw.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("eventType must be SEATED or GENERAL_ADMISSION");
+            throw new IllegalArgumentException("eventType must be SEATED, GENERAL_ADMISSION, or TRANSPORT_BUS");
         }
     }
 }

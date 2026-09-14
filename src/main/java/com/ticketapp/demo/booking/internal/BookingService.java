@@ -33,15 +33,19 @@ public class BookingService {
     }
 
     @Transactional
-    public Booking createBooking(HoldResult holdResult, UUID userId, BigDecimal amount) {
+    public Booking createBooking(HoldResult holdResult, UUID userId, BigDecimal amount, int quantity, java.util.List<String> passengerCins) {
         Booking booking = new Booking(
                 UUID.randomUUID(),
                 holdResult.holdId().toString(),
                 holdResult.eventId(),
                 holdResult.seatId(),
                 userId,
-                amount
+                amount,
+                quantity
         );
+        if (passengerCins != null && !passengerCins.isEmpty()) {
+            booking.setPassengerCins(String.join(",", passengerCins));
+        }
         bookingRepository.save(booking);
         log.info("Created booking for hold {} amount={}", holdResult.holdId(), amount);
         log.info(" the bookink is {}",booking);
