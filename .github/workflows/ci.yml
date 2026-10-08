@@ -1,0 +1,74 @@
+name: Java CI/CD with Maven & SonarQube
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-test-analyze:
+    runs-on: ubuntu-latest
+
+    # Services (Base de données, Redis) nécessaires pour les tests d'intégration
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: ticketdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0  # Requis pour SonarQube (besoin de l'historique git)
+    
+    - name: Set up JDK 21
+      uses: actions/setup-java@v3
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        cache: maven
+        
+    - name: Build and Test with Maven & JaCoCo
+      run: ./mvnw clean verify
+      
+    - name: Analyze with SonarCloud
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Fourni automatiquement par GitHub
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}    # À configurer dans les settings du dépôt
+      run: ./mvnw org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=ticket-platform
+      
+    - name: Upload Test Report
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-report
+        path: target/surefire-reports/
+        
+  docker-build:
+    needs: build-test-analyze
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build Docker image
+        run: docker build -t ticket-platform:latest .
+        # À décommenter pour publier l'image
+        # - name: Push to Docker Hub
+        #   run: |
+        #     docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
+        #     docker tag ticket-platform:latest moncompte/ticket-platform:latest
+        #     docker push moncompte/ticket-platform:latest
