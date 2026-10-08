@@ -1,4 +1,4 @@
-name: Java CI/CD with Maven & SonarQube
+name: Java CI/CD & DevOps Pipeline
 
 on:
   push:
@@ -9,8 +9,6 @@ on:
 jobs:
   build-test-analyze:
     runs-on: ubuntu-latest
-
-    # Services (Base de données, Redis) nécessaires pour les tests d'intégration
     services:
       postgres:
         image: postgres:15
@@ -33,42 +31,75 @@ jobs:
     steps:
     - uses: actions/checkout@v3
       with:
-        fetch-depth: 0  # Requis pour SonarQube (besoin de l'historique git)
-    
+        fetch-depth: 0
     - name: Set up JDK 21
       uses: actions/setup-java@v3
       with:
         java-version: '21'
         distribution: 'temurin'
         cache: maven
-        
-    - name: Build and Test with Maven & JaCoCo
+    - name: Build and Test
       run: ./mvnw clean verify
-      
-    - name: Analyze with SonarCloud
+    - name: SonarCloud Scan
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Fourni automatiquement par GitHub
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}    # À configurer dans les settings du dépôt
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       run: ./mvnw org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=ticket-platform
-      
-    - name: Upload Test Report
-      uses: actions/upload-artifact@v3
-      if: always()
-      with:
-        name: test-report
-        path: target/surefire-reports/
-        
-  docker-build:
+
+  terraform-provision:
     needs: build-test-analyze
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    defaults:
+      run:
+        working-directory: ./infrastructure/terraform
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: eu-west-3
+        
+    - name: Terraform Init
+      run: terraform init
+      
+    - name: Terraform Format
+      run: terraform fmt -check
+      
+    - name: Terraform Plan
+      run: terraform plan -out=tfplan
+      
+    - name: Terraform Apply
+      run: terraform apply -auto-approve tfplan
+
+  docker-build-push:
+    needs: terraform-provision
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v3
       - name: Build Docker image
         run: docker build -t ticket-platform:latest .
-        # À décommenter pour publier l'image
-        # - name: Push to Docker Hub
-        #   run: |
-        #     docker login -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
-        #     docker tag ticket-platform:latest moncompte/ticket-platform:latest
-        #     docker push moncompte/ticket-platform:latest
+        
+  deploy:
+    needs: docker-build-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v3
+      - name: Deploy to Server via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            cd /opt/ticket-platform
+            docker compose down
+            docker compose up -d
