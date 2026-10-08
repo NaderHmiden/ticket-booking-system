@@ -1,4 +1,12 @@
 terraform {
+  backend "s3" {
+    bucket         = "ticket-platform-tfstate-bucket" # REMPLACEZ par un nom de bucket S3 unique
+    key            = "prod/terraform.tfstate"         # Le chemin du fichier d'état dans le bucket
+    region         = "us-east-1"                      # Doit correspondre à la région de votre bucket
+    dynamodb_table = "ticket-platform-tf-lock"        # Table DynamoDB pour éviter les conflits (verrou)
+    encrypt        = true                             # Chiffre le fichier d'état
+  }
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
