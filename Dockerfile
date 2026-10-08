@@ -3,6 +3,8 @@ WORKDIR /app
 # Copier les fichiers Maven
 COPY pom.xml mvnw ./
 COPY .mvn .mvn
+RUN chmod +x mvnw
+RUN ./mvnw dependency:go-offline
 # Télécharger les dépendances hors ligne (optimisation)
 RUN ./mvnw dependency:go-offline
 # Copier le code source
