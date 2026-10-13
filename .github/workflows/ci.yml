@@ -1,66 +1,238 @@
-name: Java CI/CD & DevOps Pipeline
+
+name: Ticket Platform CI/CD
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ticket-platform-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: "21"
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  terraform-provision:
+  # --------------------------------------------------
+  # 1. CI: build, tests, coverage and Sonar quality gate
+  # --------------------------------------------------
+  build-test-analyze:
+    name: Build, Test and Quality Gate
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    defaults:
-      run:
-        working-directory: ./infrastructure/terraform
-    steps:
-    - uses: actions/checkout@v3
-    
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v2
-      
-    - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
-        aws-region: us-east-1
-        
-    - name: Terraform Init
-      run: terraform init
-      
-    - name: Terraform Format
-      run: terraform fmt -check
-      
-    - name: Terraform Plan
-      run: terraform plan -out=tfplan
-      
-    - name: Terraform Apply
-      run: terraform apply -auto-approve tfplan
 
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: ticket_platform
+          POSTGRES_USER: ticket_user
+          POSTGRES_PASSWORD: ticket_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ticket_user -d ticket_platform"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Make Maven Wrapper executable
+        run: chmod +x mvnw
+
+      - name: Build, test and generate JaCoCo report
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/ticket_platform
+          SPRING_DATASOURCE_USERNAME: ticket_user
+          SPRING_DATASOURCE_PASSWORD: ticket_password
+          SPRING_DATA_REDIS_HOST: localhost
+          SPRING_DATA_REDIS_PORT: 6379
+        run: ./mvnw --batch-mode clean verify
+
+      - name: Upload test and coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-coverage-reports
+          path: |
+            **/target/surefire-reports/**
+            **/target/failsafe-reports/**
+            **/target/site/jacoco/**
+          if-no-files-found: warn
+          retention-days: 7
+
+
+
+  # --------------------------------------------------
+  # 2. Docker: publish only after CI and Sonar succeed
+  # --------------------------------------------------
   docker-build-push:
-    needs: terraform-provision
+    name: Build and Publish Docker Image
+    needs: build-test-analyze
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+
+    permissions:
+      contents: read
+      packages: write
+
     steps:
-      - uses: actions/checkout@v3
-      - name: Build Docker image
-        run: docker build -t ticket-platform:latest .
-        
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Normalize image name
+        id: image
+        run: |
+          echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.image.outputs.name }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # --------------------------------------------------
+  # 3. Deploy: use the exact image built above
+  # --------------------------------------------------
+
   deploy:
+    name: Deploy to AWS EC2
     needs: docker-build-push
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    environment: production
+
     steps:
-      - uses: actions/checkout@v3
-      - name: Deploy to Server via SSH
-        uses: appleboy/ssh-action@v1.0.0
+      - name: Prepare image name
+        id: image
+        shell: bash
+        run: |
+          echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.2
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}:${{ github.sha }}
+          GHCR_USER: ${{ secrets.GHCR_PULL_USER }}
+          GHCR_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
+          fingerprint: ${{ secrets.SERVER_FINGERPRINT }}
+          envs: IMAGE,GHCR_USER,GHCR_TOKEN
           script: |
-            cd /opt/ticket-platform
-            docker compose down
-            docker compose up -d
+            set -eu
+            cd /opt/ticket-booking
+
+            echo "$GHCR_TOKEN" |
+              docker login ghcr.io \
+                -u "$GHCR_USER" \
+                --password-stdin
+
+            export IMAGE
+            docker compose -f compose.prod.yml pull app
+            docker compose -f compose.prod.yml up -d --no-deps app
+
+            docker image prune -f
+            docker logout ghcr.io
+
+  # --------------------------------------------------
+  # 4. Terraform: plan on same-repo PRs;
+  #    apply only through manual dispatch + approval
+  # --------------------------------------------------
+  terraform:
+    name: Terraform Plan / Approved Apply
+    needs: build-test-analyze
+    if: >-
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository) ||
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    environment:
+      name: ${{ github.event_name == 'workflow_dispatch' && 'production-infrastructure' || 'terraform-plan' }}
+
+    permissions:
+      contents: read
+      id-token: write
+
+    defaults:
+      run:
+        working-directory: infrastructure/terraform
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Configure AWS credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Terraform format check
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      - name: Terraform validate
+        run: terraform validate
+
+      - name: Terraform plan
+        run: terraform plan -input=false -out=tfplan
+
+      - name: Terraform apply
+        if: github.event_name == 'workflow_dispatch'
+        run: terraform apply -input=false -auto-approve tfplan
